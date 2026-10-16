@@ -1,0 +1,18 @@
+{
+  "class_id": "d0bd880a",
+  "class_name": "Rabbit",
+  "class_type": "user",
+  "description": "",
+  "k_shot": 5,
+  "is_ready": true,
+  "intra_class_radius": 0.6837640616297722,
+  "support_images": [
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\d0bd880a\\images\\img_e6cfaa.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\d0bd880a\\images\\img_13c63e.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\d0bd880a\\images\\img_f2026d.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\d0bd880a\\images\\img_199ce4.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\d0bd880a\\images\\img_fc088e.jpg"
+  ],
+  "created_at": "2026-10-12T20:20:59.766333",
+  "updated_at": "2026-10-12T21:57:22.573891"
+}

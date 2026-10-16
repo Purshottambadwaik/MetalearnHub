@@ -1,0 +1,18 @@
+{
+  "class_id": "7bb76231",
+  "class_name": "Snake",
+  "class_type": "user",
+  "description": "",
+  "k_shot": 5,
+  "is_ready": true,
+  "intra_class_radius": 0.7395233520269395,
+  "support_images": [
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\7bb76231\\images\\img_fa9b1f.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\7bb76231\\images\\img_3ad9c1.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\7bb76231\\images\\img_ce61dc.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\7bb76231\\images\\img_6afebc.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\7bb76231\\images\\img_e06ca2.jpg"
+  ],
+  "created_at": "2026-10-13T00:43:07.351165",
+  "updated_at": "2026-10-13T00:43:07.635551"
+}

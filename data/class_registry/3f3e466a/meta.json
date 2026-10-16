@@ -1,0 +1,18 @@
+{
+  "class_id": "3f3e466a",
+  "class_name": "Zebra",
+  "class_type": "user",
+  "description": "",
+  "k_shot": 5,
+  "is_ready": true,
+  "intra_class_radius": 0.7395233520269395,
+  "support_images": [
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\3f3e466a\\images\\img_95c4dd.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\3f3e466a\\images\\img_69fbe7.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\3f3e466a\\images\\img_de9242.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\3f3e466a\\images\\img_b21d56.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\3f3e466a\\images\\img_dc6898.jpg"
+  ],
+  "created_at": "2026-10-12T22:28:00.022395",
+  "updated_at": "2026-10-12T22:28:00.380328"
+}

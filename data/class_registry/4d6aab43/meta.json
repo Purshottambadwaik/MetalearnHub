@@ -1,0 +1,18 @@
+{
+  "class_id": "4d6aab43",
+  "class_name": "monkey",
+  "class_type": "user",
+  "description": "",
+  "k_shot": 5,
+  "is_ready": true,
+  "intra_class_radius": 0.6006911650300025,
+  "support_images": [
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\4d6aab43\\images\\img_d8f700.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\4d6aab43\\images\\img_f127dd.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\4d6aab43\\images\\img_259cf8.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\4d6aab43\\images\\img_c82430.jpg",
+    "C:\\college\\Mega_project\\Meta_learnHub_Main\\MetalearnHub\\data\\class_registry\\4d6aab43\\images\\img_5b4b39.jpg"
+  ],
+  "created_at": "2026-10-12T19:40:11.194838",
+  "updated_at": "2026-10-12T21:57:13.231426"
+}

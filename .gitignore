@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
+# Virtual Environments
+.env
+.venv/
+venv/
+ENV/
+env/
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+*.local
+
+# Large Model Checkpoints (GitHub hard-blocks files > 100MB)
+checkpoints/**/best_model.pt
+checkpoints/**/final_model.pt
+*.pth
+# Small models (<5MB) can be tracked if needed:
+!checkpoints/relation_networks/best_relation_model.pt
+
+# Raw datasets & archives (keep repo lightweight)
+archive*/
+data/raw/
+data/processed/
+*.zip
+*.tar.gz
+*.rar
+
+# Logs & temp files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
