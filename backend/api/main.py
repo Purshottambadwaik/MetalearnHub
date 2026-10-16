@@ -29,10 +29,12 @@ from pydantic import BaseModel
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import torch
+
 from ml.config import (
     ExperimentConfig, PreprocessConfig, EpisodeConfig,
     ModelConfig, TrainingConfig, BREED_NAMES,
-    RAW_DATA_DIR, METADATA_DIR, EXPERIMENTS_DIR, CHECKPOINTS_DIR,
+    RAW_DATA_DIR, METADATA_DIR, EXPERIMENTS_DIR, CHECKPOINTS_DIR, CLASS_REGISTRY_DIR,
 )
 from ml.datasets.inspector import DatasetInspector, inspect_dataset
 from ml.datasets.splitter import DatasetSplitter, create_leakage_safe_split
@@ -166,40 +168,31 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning(f"Raw data directory not found: {RAW_DATA_DIR}")
     
-    # Auto-load existing checkpoint if available
-    if CHECKPOINTS_DIR.exists():
-        for exp_dir in CHECKPOINTS_DIR.iterdir():
-            ckpt_path = exp_dir / "best_model.pt"
-            if exp_dir.is_dir() and ckpt_path.exists():
-                try:
-                    device = get_device('auto')
-                    algorithm = PrototypicalNetworkAlgorithm(
-                        backbone_name='resnet18',
-                        pretrained=True,
-                        device=str(device),
-                    )
-                    algorithm.load_checkpoint(str(ckpt_path))
-                    app_state.current_algorithm = algorithm
-                    app_state.predictor = FewShotPredictor(algorithm)
-                    logger.info(f"Auto-loaded checkpoint from {exp_dir.name}")
-                    break
-                except Exception as e:
-                    logger.warning(f"Could not auto-load checkpoint {exp_dir.name}: {e}")
-
-    # Fallback: Initialize predictor with ImageNet pretrained ResNet-18 if no checkpoint loaded yet
-    if app_state.predictor is None:
+    # Initialize predictor matching class registry backbone dimension (2048-dim for ResNet-50)
+    backbone_name = 'resnet50'
+    sample_proto = list(CLASS_REGISTRY_DIR.glob("*/prototype.pt"))
+    if sample_proto:
         try:
-            device = get_device('auto')
-            algorithm = PrototypicalNetworkAlgorithm(
-                backbone_name='resnet18',
-                pretrained=True,
-                device=str(device),
-            )
-            app_state.current_algorithm = algorithm
-            app_state.predictor = FewShotPredictor(algorithm)
-            logger.info("Initialized default FewShotPredictor with pretrained ResNet-18.")
-        except Exception as e:
-            logger.warning(f"Could not initialize default predictor: {e}")
+            proto_tensor = torch.load(sample_proto[0], map_location='cpu', weights_only=False)
+            if proto_tensor.shape[-1] == 512:
+                backbone_name = 'resnet18'
+            elif proto_tensor.shape[-1] == 2048:
+                backbone_name = 'resnet50'
+        except Exception:
+            backbone_name = 'resnet50'
+
+    try:
+        device = get_device('auto')
+        algorithm = PrototypicalNetworkAlgorithm(
+            backbone_name=backbone_name,
+            pretrained=True,
+            device=str(device),
+        )
+        app_state.current_algorithm = algorithm
+        app_state.predictor = FewShotPredictor(algorithm)
+        logger.info(f"Initialized FewShotPredictor with {backbone_name} ({2048 if backbone_name == 'resnet50' else 512}-dim embeddings).")
+    except Exception as e:
+        logger.error(f"Failed to initialize default predictor: {e}")
     
     yield
     logger.info("MetaLearnHub shutting down...")
@@ -781,7 +774,39 @@ async def predict(
             distance_threshold=distance_threshold,
             algorithm=algorithm or "ensemble",
         )
-        return result
+
+        is_accepted = result.get("is_in_system", False)
+        conf_val = float(result.get("confidence", 0.0))
+        conf_pct = conf_val * 100.0 if conf_val <= 1.0 else conf_val
+
+        candidates = []
+        for item in result.get("all_classes", []):
+            p = float(item.get("probability", 0.0))
+            candidates.append({
+                "class_id": item.get("class_id", ""),
+                "class_name": item.get("class_name", ""),
+                "class_type": item.get("class_type", "base"),
+                "distance": float(item.get("distance", 0.0)),
+                "confidence": p * 100.0 if p <= 1.0 else p,
+                "k_shot": item.get("k_shot", 5),
+                "intra_class_radius": float(item.get("intra_class_radius", 0.5)),
+            })
+
+        response_payload = {
+            **result,
+            "predicted_class": result.get("predicted_class", "UNKNOWN"),
+            "class_id": result.get("predicted_class_id", None),
+            "confidence": conf_pct if is_accepted else 0.0,
+            "raw_confidence": conf_pct,
+            "distance": float(result.get("min_distance", 0.0)),
+            "open_set_status": result.get("status", "MATCHED"),
+            "open_set_accepted": is_accepted,
+            "rejection_reason": result.get("status_message", ""),
+            "candidates": candidates,
+            "algorithm_used": result.get("algorithm", algorithm or "ensemble"),
+            "total_registered_classes": result.get("total_classes_evaluated", len(candidates)),
+        }
+        return response_payload
     except ValueError as e:
         raise HTTPException(400, str(e))
 

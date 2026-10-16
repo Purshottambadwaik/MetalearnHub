@@ -71,13 +71,12 @@ export default function Predict() {
     formData.append('distance_threshold', (distanceThreshold / 100.0).toString());
 
     try {
-      const res = await api.post('/prediction', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post('/prediction', formData);
       setPrediction(res.data);
     } catch (err: any) {
       console.error(err);
-      setError(err.response?.data?.detail || 'Prediction failed. Ensure the backend server is active.');
+      const detail = err.response?.data?.detail || err.response?.data?.message || err.message;
+      setError(detail || 'Prediction failed. Ensure the backend server is active.');
     } finally {
       setLoading(false);
     }

@@ -124,9 +124,7 @@ export default function RegisterClass() {
     selectedFiles.forEach(f => formData.append('files', f));
 
     try {
-      const res = await api.post('/adaptation/verify-batch', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post('/adaptation/verify-batch', formData);
       setVerificationResult(res.data);
       if (res.data.status === 'passed') {
         setNotification({
@@ -194,9 +192,7 @@ export default function RegisterClass() {
       const formData = new FormData();
       selectedFiles.forEach(f => formData.append('files', f));
 
-      await api.post(`/adaptation/${newClassId}/add-support-batch`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await api.post(`/adaptation/${newClassId}/add-support-batch`, formData);
 
       // Step C: Build prototype
       const protoRes = await api.post(`/adaptation/${newClassId}/build-prototype`);
@@ -230,9 +226,7 @@ export default function RegisterClass() {
       const formData = new FormData();
       selectedFiles.forEach(f => formData.append('files', f));
 
-      const res = await api.post(`/adaptation/${targetClassId}/contribute`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post(`/adaptation/${targetClassId}/contribute`, formData);
 
       setNotification({
         type: 'success',
@@ -263,9 +257,7 @@ export default function RegisterClass() {
       const formData = new FormData();
       contributeFiles.forEach(f => formData.append('files', f));
 
-      const res = await api.post(`/adaptation/${contributeTarget.class_id}/contribute`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const res = await api.post(`/adaptation/${contributeTarget.class_id}/contribute`, formData);
 
       setNotification({
         type: 'success',
