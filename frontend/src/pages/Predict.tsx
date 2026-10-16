@@ -1,545 +1,327 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api';
 import { 
-  Upload, Plus, Image as ImageIcon, Zap, CheckCircle2, 
-  AlertTriangle, Trash2, Database, Sparkles, Sliders
+  Search, Upload, Sparkles, CheckCircle2, AlertTriangle, 
+  Sliders, ShieldAlert, Cpu, BarChart2, Layers
 } from 'lucide-react';
 
-export default function Predict() {
-  const [classes, setClasses] = useState<any[]>([]);
-  const [newClassName, setNewClassName] = useState('');
-  const [modelLoaded, setModelLoaded] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [collisionNotice, setCollisionNotice] = useState<any | null>(null);
-  
-  // Custom threshold option
-  const [distanceThreshold, setDistanceThreshold] = useState<number>(18.0);
-  const [useAutoThreshold, setUseAutoThreshold] = useState<boolean>(true);
+interface PredictionCandidate {
+  class_id: string;
+  class_name: string;
+  class_type: string;
+  distance: number;
+  confidence: number;
+  k_shot?: number;
+  intra_class_radius?: number;
+}
 
-  // Prediction state
+interface PredictionResponse {
+  predicted_class: string;
+  class_id: string | null;
+  confidence: number;
+  raw_confidence: number;
+  distance: number;
+  open_set_status: string;
+  open_set_accepted: boolean;
+  rejection_reason?: string;
+  candidates: PredictionCandidate[];
+  algorithm_used: string;
+  total_registered_classes: number;
+}
+
+export default function Predict() {
   const [queryImage, setQueryImage] = useState<File | null>(null);
   const [queryPreview, setQueryPreview] = useState<string>('');
-  const [prediction, setPrediction] = useState<any>(null);
-
-  // Class filter state
-  const [filterType, setFilterType] = useState<'all' | 'base' | 'user'>('all');
+  const [algorithm, setAlgorithm] = useState<string>('ensemble');
+  const [distanceThreshold, setDistanceThreshold] = useState<number>(50.0);
+  const [loading, setLoading] = useState(false);
+  const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [classesCount, setClassesCount] = useState<number>(0);
 
   useEffect(() => {
-    fetchClasses();
+    api.get('/adaptation/classes').then(res => {
+      setClassesCount(res.data.classes?.length || 0);
+    }).catch(console.error);
   }, []);
 
-  const fetchClasses = () => {
-    api.get('/adaptation/classes').then(res => {
-      setClasses(res.data.classes || []);
-      setModelLoaded(res.data.model_loaded);
-    }).catch(console.error);
-  };
-
-  const handleCreateClass = (force: boolean = false) => {
-    if (!newClassName.trim()) return;
-    setLoading(true);
-    setCollisionNotice(null);
-    setStatusMessage(null);
-
-    api.post('/adaptation/create-class', { 
-      class_name: newClassName.trim(),
-      force_new: force 
-    })
-      .then(res => {
-        if (res.data.status === 'already_exists') {
-          setCollisionNotice(res.data);
-        } else {
-          setStatusMessage(`Class '${newClassName}' created successfully!`);
-          setNewClassName('');
-          fetchClasses();
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  };
-
-  const handleSupportUploadBatch = (classId: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    setLoading(true);
-    const formData = new FormData();
-    for (let i = 0; i < e.target.files.length; i++) {
-      formData.append('files', e.target.files[i]);
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setQueryImage(file);
+      setQueryPreview(URL.createObjectURL(file));
+      setPrediction(null);
+      setError(null);
     }
-    
-    api.post(`/adaptation/${classId}/add-support-batch`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    .then(() => {
-      // Automatically build prototype for convenience
-      api.post(`/adaptation/${classId}/build-prototype`).then(() => {
-        fetchClasses();
-        setLoading(false);
-        setCollisionNotice(null);
-        setStatusMessage(`Images uploaded and prototype built successfully!`);
-      }).catch(() => {
-        fetchClasses();
-        setLoading(false);
-      });
-    })
-    .catch(err => {
-      console.error(err);
-      setLoading(false);
-    });
   };
 
-  const handleBuildPrototype = (classId: string) => {
+  const handlePredict = async () => {
+    if (!queryImage) {
+      setError('Please upload a query image to classify.');
+      return;
+    }
+
     setLoading(true);
-    api.post(`/adaptation/${classId}/build-prototype`)
-      .then(() => {
-        fetchClasses();
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  };
+    setError(null);
 
-  const handleDeleteClass = (classId: string) => {
-    if (!confirm('Are you sure you want to delete this class from the system registry?')) return;
-    setLoading(true);
-    api.delete(`/adaptation/${classId}`)
-      .then(() => {
-        fetchClasses();
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  };
-
-  const handleInitBaseClasses = () => {
-    setLoading(true);
-    setStatusMessage('Syncing base dataset breeds into registry...');
-    api.post('/adaptation/init-base-classes')
-      .then(res => {
-        setStatusMessage(res.data.message || 'Base classes synced successfully!');
-        fetchClasses();
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setStatusMessage('Base dataset directory not found or already synced.');
-        setLoading(false);
-      });
-  };
-
-  const handleQueryUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    
-    const file = e.target.files[0];
-    setQueryImage(file);
-    setQueryPreview(URL.createObjectURL(file));
-    setPrediction(null);
-  };
-
-  const handlePredict = () => {
-    if (!queryImage) return;
-    
-    setLoading(true);
     const formData = new FormData();
     formData.append('file', queryImage);
-    
-    if (!useAutoThreshold && distanceThreshold > 0) {
-      formData.append('distance_threshold', distanceThreshold.toString());
-    }
-    
-    // Default compares against ALL ready classes in system
-    const readyClassIds = classes.filter(c => c.is_ready).map(c => c.class_id);
-    formData.append('class_ids', JSON.stringify(readyClassIds));
-    
-    api.post('/prediction', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-    .then(res => {
+    formData.append('algorithm', algorithm);
+    // Convert 0-100 threshold slider to decimal 0.0-1.0
+    formData.append('distance_threshold', (distanceThreshold / 100.0).toString());
+
+    try {
+      const res = await api.post('/prediction', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setPrediction(res.data);
-      setLoading(false);
-    })
-    .catch(err => {
+    } catch (err: any) {
       console.error(err);
+      setError(err.response?.data?.detail || 'Prediction failed. Ensure the backend server is active.');
+    } finally {
       setLoading(false);
-    });
+    }
   };
-
-  if (!modelLoaded) {
-    return (
-      <div className="flex flex-col justify-center items-center h-64 text-center">
-        <Zap size={48} className="text-warning mb-4" />
-        <h2 className="text-xl font-bold mb-2">Inference Engine Initializing...</h2>
-        <p className="text-secondary max-w-md">
-          Connecting to model checkpoint. Please wait or load a checkpoint from the Evaluation tab.
-        </p>
-      </div>
-    );
-  }
-
-  const readyClasses = classes.filter(c => c.is_ready);
-  const filteredClasses = classes.filter(cls => {
-    if (filterType === 'all') return true;
-    return cls.class_type === filterType;
-  });
 
   return (
     <div className="animate-fade-in pb-12">
-      <div className="mb-6 flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold mb-1">Persistent Few-Shot Adaptation & Open-Set Inference</h1>
-          <p className="text-secondary text-sm">
-            Dynamically register new classes into the system without retraining weights. Evaluates query images against both base dataset and user classes, detecting outliers with distance thresholding.
-          </p>
-        </div>
-        <button 
-          className="btn btn-secondary text-xs flex items-center gap-2" 
-          onClick={handleInitBaseClasses}
-          disabled={loading}
-          title="Seed base dataset classes into the persistent registry"
-        >
-          <Database size={14} /> Sync Base Breeds
-        </button>
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold mb-2 flex items-center gap-2">
+          <Search className="text-primary" /> Query Image Recognition Studio
+        </h1>
+        <p className="text-secondary text-sm">
+          Classify any query image across all {classesCount} enrolled visual categories in real time with Open-Set Out-of-Distribution rejection.
+        </p>
       </div>
 
-      {statusMessage && (
-        <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-md text-sm text-primary flex items-center justify-between">
-          <span>{statusMessage}</span>
-          <button className="text-xs opacity-70 hover:opacity-100" onClick={() => setStatusMessage(null)}>✕</button>
-        </div>
-      )}
-
-      {collisionNotice && (
-        <div className="mb-6 p-4 bg-warning/10 border border-warning/30 rounded-lg text-sm text-warning animate-fade-in">
-          <div className="flex items-start gap-3">
-            <AlertTriangle size={20} className="shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-bold text-base mb-1">Class Already Exists in System!</h4>
-              <p className="mb-3 text-secondary text-sm">
-                A class named <strong>"{collisionNotice.class_name}"</strong> is already registered in the persistent system with <strong>{collisionNotice.k_shot} support images</strong>.
-              </p>
-              <div className="flex items-center gap-3">
-                <label className="btn btn-primary text-xs cursor-pointer">
-                  <Upload size={14} /> Contribute More Images to "{collisionNotice.class_name}"
-                  <input 
-                    type="file" 
-                    multiple 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={(e) => handleSupportUploadBatch(collisionNotice.class_id, e)} 
-                    disabled={loading} 
-                  />
-                </label>
-                <button 
-                  className="btn btn-secondary text-xs" 
-                  onClick={() => setCollisionNotice(null)}
-                >
-                  Choose Different Name
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-8">
-        {/* Left Column: Persistent Class Registry */}
-        <div className="flex flex-col gap-6">
+      {/* Main Grid: Controls + Upload + Results */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Column: Upload & Inference Parameters (5 cols) */}
+        <div className="lg:col-span-5 space-y-6">
           <div className="card">
-            <div className="card-header flex justify-between items-center mb-4">
-              <h2 className="card-title text-primary flex items-center gap-2">
-                <Sparkles size={18} /> 1. System Class Registry
-              </h2>
-              <div className="flex gap-1 text-xs bg-[var(--bg-main)] p-1 rounded-md border border-[var(--border-light)]">
-                <button 
-                  className={`px-2 py-1 rounded ${filterType === 'all' ? 'bg-primary text-white font-medium' : 'text-secondary'}`}
-                  onClick={() => setFilterType('all')}
-                >
-                  All ({classes.length})
-                </button>
-                <button 
-                  className={`px-2 py-1 rounded ${filterType === 'base' ? 'bg-primary text-white font-medium' : 'text-secondary'}`}
-                  onClick={() => setFilterType('base')}
-                >
-                  Base ({classes.filter(c => c.class_type === 'base').length})
-                </button>
-                <button 
-                  className={`px-2 py-1 rounded ${filterType === 'user' ? 'bg-primary text-white font-medium' : 'text-secondary'}`}
-                  onClick={() => setFilterType('user')}
-                >
-                  User ({classes.filter(c => c.class_type === 'user').length})
-                </button>
-              </div>
-            </div>
-            
-            {/* Create Class Input */}
-            <div className="flex gap-2 mb-6">
-              <input 
-                type="text" 
-                className="form-control" 
-                placeholder="New class name (e.g. Tiger, Hereford)" 
-                value={newClassName}
-                onChange={e => setNewClassName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreateClass(false)}
-              />
-              <button 
-                className="btn btn-primary whitespace-nowrap" 
-                onClick={() => handleCreateClass(false)} 
-                disabled={loading || !newClassName.trim()}
-              >
-                <Plus size={16} /> Register Class
-              </button>
-            </div>
+            <h2 className="text-md font-semibold mb-4 flex items-center gap-2">
+              <Upload size={18} className="text-primary" /> 1. Upload Query Image
+            </h2>
 
-            {/* Class Cards List */}
-            <div className="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1">
-              {filteredClasses.length === 0 ? (
-                <div className="text-center p-6 text-muted border border-dashed border-[var(--border-light)] rounded-md">
-                  No classes registered under this filter. Register a new class above or sync base breeds!
+            {/* Dropzone */}
+            <div className="border-2 border-dashed border-border-light hover:border-primary/50 rounded-xl p-6 text-center bg-surface-elevated/40 transition">
+              {queryPreview ? (
+                <div className="relative group mx-auto w-48 h-48 rounded-lg overflow-hidden border border-border-light shadow-md mb-4">
+                  <img src={queryPreview} alt="Query preview" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                    <label htmlFor="query-upload" className="btn btn-secondary text-xs cursor-pointer">
+                      Change Photo
+                    </label>
+                  </div>
                 </div>
               ) : (
-                filteredClasses.map(cls => (
-                  <div 
-                    key={cls.class_id} 
-                    className={`p-4 rounded-md border transition-all ${
-                      cls.is_ready 
-                        ? 'border-success/40 bg-[var(--bg-surface)] hover:border-success' 
-                        : 'border-[var(--border-light)] bg-[var(--bg-main)]'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-base">{cls.class_name}</h3>
-                        {cls.is_ready && <CheckCircle2 size={16} className="text-success" />}
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-mono uppercase ${
-                          cls.class_type === 'base' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'
-                        }`}>
-                          {cls.class_type}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="badge badge-secondary text-xs">{cls.k_shot}-Shot</span>
-                        {cls.class_type === 'user' && (
-                          <button 
-                            className="text-muted hover:text-danger p-1" 
-                            title="Delete class"
-                            onClick={() => handleDeleteClass(cls.class_id)}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border-light)] text-xs text-secondary">
-                      <div className="flex items-center gap-2">
-                        <label className="btn btn-secondary text-xs cursor-pointer py-1 px-2.5">
-                          <Upload size={13} /> Upload Images (Batch)
-                          <input 
-                            type="file" 
-                            multiple 
-                            className="hidden" 
-                            accept="image/*" 
-                            onChange={(e) => handleSupportUploadBatch(cls.class_id, e)} 
-                            disabled={loading} 
-                          />
-                        </label>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {cls.intra_class_radius > 0 && (
-                          <span className="text-[11px] text-muted">Radius: {cls.intra_class_radius.toFixed(1)}</span>
-                        )}
-                        <button 
-                          className={`btn text-xs py-1 px-2.5 ${cls.k_shot > 0 && !cls.is_ready ? 'btn-primary' : 'btn-secondary opacity-60'}`}
-                          onClick={() => handleBuildPrototype(cls.class_id)}
-                          disabled={loading || cls.k_shot === 0 || cls.is_ready}
-                        >
-                          <Zap size={13} /> {cls.is_ready ? 'Prototype Ready' : 'Build Prototype'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                <div className="py-6">
+                  <Search className="mx-auto text-secondary mb-3 opacity-60" size={36} />
+                  <p className="text-sm font-medium text-primary mb-1">Click or drag a test image here</p>
+                  <p className="text-xs text-muted mb-4">PNG, JPG, WebP supported</p>
+                </div>
+              )}
+
+              <input
+                type="file"
+                accept="image/*"
+                id="query-upload"
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+              {!queryPreview && (
+                <label htmlFor="query-upload" className="btn btn-secondary text-sm cursor-pointer inline-block">
+                  Browse File
+                </label>
               )}
             </div>
           </div>
+
+          {/* Inference Settings */}
+          <div className="card">
+            <h3 className="text-md font-semibold mb-4 flex items-center gap-2">
+              <Sliders size={18} className="text-primary" /> 2. Algorithm & Threshold Settings
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-secondary mb-1">
+                  Active Algorithm
+                </label>
+                <select
+                  value={algorithm}
+                  onChange={e => setAlgorithm(e.target.value)}
+                  className="input w-full text-sm"
+                >
+                  <option value="ensemble">4-Way Consensus Ensemble (Recommended)</option>
+                  <option value="protonet">Prototypical Networks (Metric Centroid)</option>
+                  <option value="matching_net">Matching Networks (Exemplar Attention)</option>
+                  <option value="relation_net">Relation Networks (Neural Comparator)</option>
+                  <option value="maml">MAML (First-Order Gradient Adapt)</option>
+                </select>
+                <span className="text-[11px] text-muted mt-1 block">
+                  Ensemble combines ProtoNet, MatchingNet, RelationNet, and MAML for highest reliability.
+                </span>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs font-semibold uppercase text-secondary">
+                    Certainty Gate (Rejection Threshold)
+                  </label>
+                  <span className="font-mono text-xs font-bold text-primary">{distanceThreshold}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="20"
+                  max="90"
+                  step="5"
+                  value={distanceThreshold}
+                  onChange={e => setDistanceThreshold(Number(e.target.value))}
+                  className="w-full accent-primary cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-muted mt-1">
+                  <span>Permissive (20%)</span>
+                  <span>Balanced (50%)</span>
+                  <span>Strict (90%)</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePredict}
+                disabled={loading || !queryImage}
+                className="btn btn-primary w-full py-2.5 flex items-center justify-center gap-2 font-medium text-sm mt-4"
+              >
+                <Sparkles size={18} />
+                {loading ? 'Running Few-Shot Recognition...' : 'Classify Query Image'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Right Column: Prediction & Open-Set Matching */}
-        <div className="flex flex-col gap-6">
-          <div className="card">
-            <div className="card-header flex justify-between items-center mb-3">
-              <h2 className="card-title text-success flex items-center gap-2">
-                <Zap size={18} /> 2. Predict Query Image
-              </h2>
-              <span className="text-xs text-secondary">
-                Evaluating against <strong>{readyClasses.length}</strong> active classes
-              </span>
+        {/* Right Column: Prediction Results & Explanation (7 cols) */}
+        <div className="lg:col-span-7 space-y-6">
+          {error && (
+            <div className="card border-danger/40 bg-danger/10 text-danger p-4 flex items-center gap-3 text-sm">
+              <AlertTriangle size={20} className="shrink-0" />
+              <span>{error}</span>
             </div>
-            
-            {readyClasses.length === 0 ? (
-              <div className="p-4 text-center text-warning bg-warning/10 rounded-md border border-warning/20">
-                Please register at least one class and build its prototype first.
-              </div>
-            ) : (
-              <>
-                {/* Distance Threshold Option */}
-                <div className="p-3 bg-[var(--bg-main)] rounded-md border border-[var(--border-light)] mb-4 text-xs">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-medium flex items-center gap-1.5 text-secondary">
-                      <Sliders size={13} /> Open-Set Distance Threshold (τ)
+          )}
+
+          {prediction ? (
+            <div className="space-y-6 animate-fade-in">
+              {/* Main Classification Result Banner */}
+              <div className={`card border-2 ${
+                prediction.open_set_accepted 
+                  ? 'border-success/50 bg-success/5' 
+                  : 'border-danger/50 bg-danger/5'
+              }`}>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-secondary block mb-1">
+                      System Verdict
                     </span>
-                    <button 
-                      className={`text-[11px] px-2 py-0.5 rounded ${useAutoThreshold ? 'bg-primary/20 text-primary font-medium' : 'text-muted'}`}
-                      onClick={() => setUseAutoThreshold(!useAutoThreshold)}
-                    >
-                      {useAutoThreshold ? 'Auto (Dynamic)' : 'Manual'}
-                    </button>
+                    <h2 className="text-3xl font-extrabold text-text-primary flex items-center gap-2">
+                      {prediction.open_set_accepted ? (
+                        <>
+                          <CheckCircle2 className="text-success" size={28} />
+                          {prediction.predicted_class}
+                        </>
+                      ) : (
+                        <>
+                          <ShieldAlert className="text-danger" size={28} />
+                          [OUT-OF-DISTRIBUTION / REJECTED]
+                        </>
+                      )}
+                    </h2>
                   </div>
-                  {!useAutoThreshold && (
-                    <div className="flex items-center gap-3">
-                      <input 
-                        type="range" 
-                        min="5" 
-                        max="35" 
-                        step="0.5" 
-                        value={distanceThreshold} 
-                        onChange={e => setDistanceThreshold(parseFloat(e.target.value))}
-                        className="w-full accent-primary" 
-                      />
-                      <span className="font-mono text-primary font-bold">{distanceThreshold.toFixed(1)}</span>
-                    </div>
-                  )}
-                  <p className="text-muted text-[11px] mt-1">
-                    Images exceeding this distance to all prototypes are rejected as <strong>"Not In System / Out-of-Distribution"</strong>.
-                  </p>
+
+                  <div className="text-right">
+                    <span className="text-xs text-secondary block mb-1">Confidence</span>
+                    <span className={`text-2xl font-mono font-bold ${
+                      prediction.open_set_accepted ? 'text-success' : 'text-danger'
+                    }`}>
+                      {prediction.confidence.toFixed(1)}%
+                    </span>
+                  </div>
                 </div>
 
-                {/* Upload Query Preview Area */}
-                <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[var(--border-light)] rounded-lg mb-4 bg-[var(--bg-main)] relative overflow-hidden">
-                  {queryPreview ? (
-                    <img src={queryPreview} alt="Query" className="h-44 object-contain z-10 rounded" />
+                {/* Explanation text */}
+                <p className="text-xs leading-relaxed text-secondary border-t border-border-light pt-3">
+                  {prediction.open_set_accepted ? (
+                    <>
+                      Query matched registered category <strong>'{prediction.predicted_class}'</strong> with {prediction.confidence.toFixed(1)}% confidence, satisfying the {distanceThreshold}% certainty gate and intra-class dispersion bounds.
+                    </>
                   ) : (
-                    <div className="flex flex-col items-center text-muted">
-                      <ImageIcon size={44} className="mb-2 opacity-40" />
-                      <span className="text-sm">Click or drag query image to classify</span>
-                    </div>
+                    <>
+                      <strong>Out-of-Distribution Warning:</strong> {prediction.rejection_reason || 'Query does not sufficiently match any enrolled concept. Certainty threshold set to 0.0% to prevent closed-set hallucination.'}
+                    </>
                   )}
-                  
-                  <input 
-                    type="file" 
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20" 
-                    accept="image/*" 
-                    onChange={handleQueryUpload} 
-                  />
-                </div>
-                
-                <button 
-                  className="btn btn-primary w-full py-2.5 text-base font-bold shadow-lg shadow-primary/30 flex items-center justify-center gap-2"
-                  onClick={handlePredict}
-                  disabled={loading || !queryImage}
-                >
-                  <Zap size={18} /> Classify & Verify System Match
-                </button>
-              </>
-            )}
-          </div>
-
-          {/* Prediction Result Display */}
-          {prediction && (
-            <div className={`card animate-fade-in border-2 ${
-              prediction.is_in_system 
-                ? 'border-success/60 bg-gradient-to-br from-[var(--bg-surface)] to-emerald-950/20' 
-                : 'border-warning/60 bg-gradient-to-br from-[var(--bg-surface)] to-amber-950/20'
-            }`}>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-xs uppercase tracking-wider font-semibold text-secondary">
-                  Open-Set Verification Result
-                </span>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-                  prediction.is_in_system 
-                    ? 'bg-success/20 text-success' 
-                    : 'bg-warning/20 text-warning'
-                }`}>
-                  {prediction.is_in_system ? (
-                    <><CheckCircle2 size={13} /> MATCH FOUND</>
-                  ) : (
-                    <><AlertTriangle size={13} /> NOT IN OUR SYSTEM</>
-                  )}
-                </span>
+                </p>
               </div>
 
-              <div className="flex items-baseline gap-3 mb-2">
-                <div className={`text-2xl font-black ${prediction.is_in_system ? 'text-success' : 'text-warning'}`}>
-                  {prediction.predicted_class}
+              {/* Candidate Similarity Distribution */}
+              <div className="card">
+                <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                  <BarChart2 size={16} className="text-primary" /> Candidate Similarity Distribution
+                </h3>
+
+                <div className="space-y-3">
+                  {prediction.candidates.slice(0, 5).map((cand, idx) => (
+                    <div key={cand.class_id || idx} className="space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="font-medium text-text-primary flex items-center gap-1.5">
+                          <span className="text-muted font-mono">{idx + 1}.</span>
+                          {cand.class_name}
+                          <span className={`text-[10px] px-1.5 py-0.2 rounded ${
+                            cand.class_type === 'base' ? 'bg-primary/20 text-primary' : 'bg-[#8b5cf6]/20 text-[#a78bfa]'
+                          }`}>
+                            {cand.class_type}
+                          </span>
+                        </span>
+                        <span className="font-mono text-secondary">
+                          {cand.confidence.toFixed(1)}% (dist: {cand.distance.toFixed(3)})
+                        </span>
+                      </div>
+                      <div className="w-full bg-border-light rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            idx === 0 && prediction.open_set_accepted ? 'bg-success' : 'bg-primary/60'
+                          }`}
+                          style={{ width: `${Math.min(100, Math.max(0, cand.confidence))}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                {prediction.is_in_system && prediction.predicted_class_type && (
-                  <span className="text-xs px-2 py-0.5 rounded bg-primary/20 text-primary font-mono uppercase">
-                    {prediction.predicted_class_type} class
-                  </span>
-                )}
               </div>
 
-              <p className="text-xs text-secondary mb-4">
-                {prediction.status_message}
+              {/* Algorithm Telemetry Details */}
+              <div className="card bg-surface-elevated/40 text-xs space-y-2">
+                <div className="flex justify-between text-secondary">
+                  <span>Evaluated By Algorithm:</span>
+                  <span className="font-semibold text-text-primary uppercase font-mono">{prediction.algorithm_used}</span>
+                </div>
+                <div className="flex justify-between text-secondary">
+                  <span>Enrolled Search Space:</span>
+                  <span className="font-semibold text-text-primary">{prediction.total_registered_classes} Classes</span>
+                </div>
+                <div className="flex justify-between text-secondary">
+                  <span>Nearest Prototype Distance:</span>
+                  <span className="font-mono text-text-primary">{prediction.distance.toFixed(4)}</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Idle Placeholder */
+            <div className="card text-center py-16 border-dashed border-border-light">
+              <Cpu className="mx-auto text-muted mb-3 opacity-40" size={48} />
+              <h3 className="text-md font-semibold text-text-primary mb-1">Awaiting Query Input</h3>
+              <p className="text-xs text-secondary max-w-sm mx-auto">
+                Upload a test image on the left and click "Classify Query Image" to inspect real-time feature projections and open-set rejection.
               </p>
-
-              {/* Metrics Grid */}
-              <div className="grid grid-cols-3 gap-2 p-3 bg-[var(--bg-main)] rounded-lg mb-4 text-xs border border-[var(--border-light)]">
-                <div>
-                  <div className="text-muted text-[11px]">Min Distance</div>
-                  <div className="font-mono font-bold text-sm">{prediction.min_distance}</div>
-                </div>
-                <div>
-                  <div className="text-muted text-[11px]">Threshold (τ)</div>
-                  <div className="font-mono font-bold text-sm">{prediction.distance_threshold}</div>
-                </div>
-                <div>
-                  <div className="text-muted text-[11px]">Confidence</div>
-                  <div className="font-mono font-bold text-sm">{(prediction.confidence * 100).toFixed(1)}%</div>
-                </div>
-              </div>
-
-              {/* Class Similarities / Distances Ranking */}
-              <h4 className="text-xs font-semibold mb-2 text-secondary flex justify-between">
-                <span>Ranked Similarities (All Evaluated Classes)</span>
-                <span>Distance</span>
-              </h4>
-              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
-                {prediction.all_classes.map((c: any) => (
-                  <div key={c.class_id} className="text-xs p-2 bg-[var(--bg-main)] rounded border border-[var(--border-light)]">
-                    <div className="flex justify-between items-center mb-1">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <span>{c.class_name}</span>
-                        <span className="text-[10px] text-muted font-mono">({c.class_type})</span>
-                      </div>
-                      <div className="flex items-center gap-2 font-mono">
-                        <span className="text-muted">d={c.distance}</span>
-                        <span className="font-bold text-primary">{(c.probability * 100).toFixed(1)}%</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-[var(--bg-surface)] h-1.5 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary" 
-                        style={{ width: `${c.probability * 100}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="text-[11px] text-muted text-right mt-3 pt-2 border-t border-[var(--border-light)] flex justify-between">
-                <span>Evaluated {prediction.total_classes_evaluated} classes in pool</span>
-                <span>Inference: {prediction.inference_time_ms}ms</span>
-              </div>
             </div>
           )}
         </div>

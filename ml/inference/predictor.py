@@ -385,6 +385,118 @@ class FewShotPredictor:
         self.add_support_images_batch(class_id, image_bytes_list)
         return self.build_prototype(class_id)
 
+    def verify_support_batch(
+        self,
+        image_bytes_list: List[bytes],
+        proposed_class_name: str = "",
+    ) -> dict:
+        """
+        Validates a candidate support batch before creating or updating a class:
+        1. Embeds each image using the backbone network.
+        2. Computes pairwise cosine similarity to identify visual outliers.
+        3. Computes overall batch coherence score (0-100%).
+        4. Detects cross-class collisions against existing registered classes.
+        """
+        if not image_bytes_list:
+            return {"status": "error", "message": "No images provided."}
+
+        self.algorithm.get_model().eval()
+        device = next(self.algorithm.get_model().parameters()).device
+        embeddings = []
+        valid_indices = []
+
+        with torch.no_grad():
+            for idx, b in enumerate(image_bytes_list):
+                try:
+                    img = Image.open(BytesIO(b)).convert('RGB')
+                    tensor = self.transform(img).unsqueeze(0).to(device)
+                    emb = self.algorithm.get_model().embed(tensor)
+                    emb = F.normalize(emb, p=2, dim=1)
+                    embeddings.append(emb.cpu())
+                    valid_indices.append(idx)
+                except Exception as e:
+                    logger.warning(f"Error embedding candidate image #{idx}: {e}")
+
+        if len(embeddings) < 2:
+            return {
+                "status": "warning",
+                "batch_coherence": 100.0 if len(embeddings) == 1 else 0.0,
+                "message": "At least 2 valid images needed to compute coherence.",
+                "image_analysis": [{"index": i, "similarity_score": 100.0, "is_outlier": False, "note": "Single image"} for i in valid_indices],
+                "collision_warning": None,
+                "nearest_existing_class": None,
+            }
+
+        all_emb = torch.cat(embeddings, dim=0)
+        sim_matrix = torch.matmul(all_emb, all_emb.T)
+
+        K = all_emb.size(0)
+        avg_sims = []
+        for i in range(K):
+            others_sum = sim_matrix[i].sum().item() - sim_matrix[i, i].item()
+            avg_sim = others_sum / (K - 1)
+            avg_sims.append(avg_sim)
+
+        mean_coherence = float(np.mean(avg_sims))
+        coherence_pct = round(max(0.0, min(100.0, mean_coherence * 100.0)), 1)
+
+        image_analysis = []
+        outlier_count = 0
+        for orig_idx, sim in zip(valid_indices, avg_sims):
+            is_outlier = (sim < 0.45) or (sim < (mean_coherence - 0.22) and mean_coherence > 0.60)
+            if is_outlier:
+                outlier_count += 1
+            image_analysis.append({
+                "index": orig_idx,
+                "similarity_score": round(float(sim) * 100.0, 1),
+                "is_outlier": is_outlier,
+                "note": "Visual outlier: Low similarity to other images in batch" if is_outlier else "Coherent with batch"
+            })
+
+        candidate_centroid = all_emb.mean(dim=0, keepdim=True)
+        candidate_centroid = F.normalize(candidate_centroid, p=2, dim=1)
+        collision_warning = None
+        nearest_class = None
+        highest_sim = -1.0
+
+        norm_proposed = proposed_class_name.strip().lower()
+
+        for c in self.classes.values():
+            if c.is_ready and c.prototype is not None:
+                sim = torch.cosine_similarity(candidate_centroid, c.prototype).item()
+                if sim > highest_sim:
+                    highest_sim = sim
+                    nearest_class = {
+                        "class_name": c.class_name,
+                        "class_id": c.class_id,
+                        "similarity": round(sim * 100.0, 1),
+                        "class_type": c.class_type,
+                    }
+
+        if nearest_class and highest_sim > 0.85:
+            if nearest_class["class_name"].strip().lower() != norm_proposed:
+                collision_warning = (
+                    f"Possible Mislabeled Class: Uploaded images have {nearest_class['similarity']}% "
+                    f"visual similarity to existing class '{nearest_class['class_name']}'. "
+                    f"Did you mean to contribute to '{nearest_class['class_name']}' instead?"
+                )
+
+        status = "passed"
+        if coherence_pct < 50.0:
+            status = "rejected"
+        elif outlier_count > 0 or collision_warning:
+            status = "warning"
+
+        return {
+            "status": status,
+            "batch_coherence": coherence_pct,
+            "outlier_count": outlier_count,
+            "image_analysis": image_analysis,
+            "collision_warning": collision_warning,
+            "nearest_existing_class": nearest_class,
+        }
+
+
     def seed_base_classes_from_dataset(
         self,
         raw_data_dir: Path = None,

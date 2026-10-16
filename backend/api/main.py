@@ -718,6 +718,36 @@ async def init_base_classes():
         raise HTTPException(500, f"Failed to seed base classes: {e}")
 
 
+@app.post("/api/adaptation/verify-batch")
+async def verify_support_batch(
+    class_name: str = Form(""),
+    files: List[UploadFile] = File(...),
+):
+    """
+    Validates a candidate support batch before creating or updating a class:
+    1. Computes ResNet embeddings for all images.
+    2. Identifies visual outliers (low mutual similarity).
+    3. Calculates overall batch coherence score (0-100%).
+    4. Detects cross-class collisions against existing registered classes.
+    """
+    if app_state.predictor is None:
+        raise HTTPException(400, "No model loaded")
+
+    try:
+        bytes_list = []
+        for f in files:
+            bytes_list.append(await f.read())
+
+        result = app_state.predictor.verify_support_batch(
+            image_bytes_list=bytes_list,
+            proposed_class_name=class_name,
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Error in verify_support_batch: {e}")
+        raise HTTPException(500, f"Batch verification failed: {e}")
+
+
 @app.delete("/api/adaptation/{class_id}")
 async def delete_registered_class(class_id: str):
     """Delete a registered class and its artifacts."""
@@ -735,6 +765,7 @@ async def predict(
     file: UploadFile = File(...),
     class_ids: Optional[str] = Form(None),
     distance_threshold: Optional[float] = Form(None),
+    algorithm: Optional[str] = Form("ensemble"),
 ):
     """Classify a query image against all registered classes with open-set verification."""
     if app_state.predictor is None:
@@ -748,6 +779,7 @@ async def predict(
             query_image_bytes=image_bytes,
             class_ids=cids,
             distance_threshold=distance_threshold,
+            algorithm=algorithm or "ensemble",
         )
         return result
     except ValueError as e:
