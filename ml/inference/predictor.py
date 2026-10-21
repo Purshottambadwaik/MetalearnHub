@@ -656,8 +656,35 @@ class FewShotPredictor:
                     maml_dists = 1.0 - maml_sims
                     maml_probs = F.softmax(maml_sims * 16.0, dim=1)[0]
 
+            # 5. AME-Net (Adaptive Metric-Exemplar Hybrid) dynamic gating:
+            class_dispersions = []
+            for tc in target_classes:
+                s_emb = tc.support_embeddings if (tc.support_embeddings is not None and len(tc.support_embeddings) > 0) else tc.prototype
+                s_emb = F.normalize(s_emb.to(device), p=2, dim=1)
+                proto = F.normalize(tc.prototype.to(device), p=2, dim=1)
+                sim_c = (s_emb * proto).sum(dim=1)
+                class_dispersions.append((1.0 - sim_c).mean())
+            mean_disp = torch.stack(class_dispersions).mean() if class_dispersions else torch.tensor(0.2, device=device)
+
+            eps = 1e-8
+            h_p = -(proto_probs * torch.log(proto_probs + eps)).sum()
+            h_m = -(matching_probs * torch.log(matching_probs + eps)).sum()
+            delta_h = h_p - h_m
+            # Dynamic gating: lower dispersion / lower proto entropy -> higher alpha (favor ProtoNet)
+            alpha_logit = 0.5 - (2.5 * mean_disp) - (1.2 * delta_h)
+            alpha_ame = float(torch.sigmoid(alpha_logit).clamp(min=0.05, max=0.95).item())
+
+            ame_probs = alpha_ame * proto_probs + (1.0 - alpha_ame) * matching_probs
+            ame_dists = alpha_ame * proto_dists + (1.0 - alpha_ame) * matching_dists
+            if ame_dists.dim() == 1:
+                ame_dists = ame_dists.unsqueeze(0)
+
             # Route to chosen algorithm or ensemble:
-            if algo_mode in ["matching_net", "matching_networks", "matching"]:
+            if algo_mode in ["ame_net", "amenet", "hybrid", "adaptive_hybrid"]:
+                active_algorithm_name = "AME-Net (Adaptive Metric-Exemplar Hybrid)"
+                distances = ame_dists
+                probs = ame_probs
+            elif algo_mode in ["matching_net", "matching_networks", "matching"]:
                 active_algorithm_name = "Matching Networks"
                 distances = matching_dists
                 probs = matching_probs
@@ -693,6 +720,14 @@ class FewShotPredictor:
                     "class": target_classes[relation_probs.argmax().item()].class_name,
                     "confidence": round(float(relation_probs.max().item()), 4),
                     "distance": round(float(relation_dists.min().item()), 4),
+                },
+                "ame_net": {
+                    "class": target_classes[ame_probs.argmax().item()].class_name,
+                    "confidence": round(float(ame_probs.max().item()), 4),
+                    "distance": round(float(ame_dists.min().item()), 4),
+                    "alpha_centroid_weight": round(alpha_ame, 4),
+                    "exemplar_weight": round(1.0 - alpha_ame, 4),
+                    "support_dispersion": round(float(mean_disp.item()), 4),
                 },
             }
             if maml_probs is not None:

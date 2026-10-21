@@ -321,9 +321,9 @@ Examples:
     parser.add_argument(
         "--algorithm", "-a",
         type=str,
-        default="protonet",
-        choices=["protonet", "matching_net", "relation_net", "maml", "ensemble"],
-        help="Few-shot algorithm to use: 'protonet', 'matching_net', 'relation_net', 'maml', or 'ensemble' (default: protonet)"
+        default="ame_net",
+        choices=["ame_net", "protonet", "matching_net", "relation_net", "maml", "ensemble"],
+        help="Few-shot algorithm to use: 'ame_net' (Adaptive Hybrid), 'protonet', 'matching_net', 'relation_net', 'maml', or 'ensemble' (default: ame_net)"
     )
     parser.add_argument("--compare-baseline", "-b", action="store_true", help="Run head-to-head scientific benchmark against Conventional ML baseline")
     parser.add_argument("--checkpoint", "-c", type=str, default=None, help="Optional model checkpoint file path")
@@ -391,17 +391,24 @@ Examples:
         print(f"Evaluated:       {res['total_classes_evaluated']} registered classes")
         print(f"Inference Time:  {res['inference_time_ms']} ms")
 
-        if args.algorithm == "ensemble" and "algorithm_breakdown" in res:
-            print("\nAlgorithm Consensus Breakdown:")
+        if args.algorithm in ["ame_net", "ensemble"] and "algorithm_breakdown" in res:
             bd = res["algorithm_breakdown"]
-            if "protonet" in bd and bd["protonet"]:
-                print(f"  • ProtoNet:     {bd['protonet']['class']:<12} ({bd['protonet']['confidence']*100:5.1f}% conf, dist={bd['protonet']['distance']:.3f})")
-            if "matching_net" in bd and bd["matching_net"]:
-                print(f"  • MatchingNet:  {bd['matching_net']['class']:<12} ({bd['matching_net']['confidence']*100:5.1f}% conf, dist={bd['matching_net']['distance']:.3f})")
-            if "relation_net" in bd and bd["relation_net"]:
-                print(f"  • RelationNet:  {bd['relation_net']['class']:<12} ({bd['relation_net']['confidence']*100:5.1f}% conf, dist={bd['relation_net']['distance']:.3f})")
-            if "maml" in bd and bd["maml"]:
-                print(f"  • MAML:         {bd['maml']['class']:<12} ({bd['maml']['confidence']*100:5.1f}% conf, dist={bd['maml']['distance']:.3f})")
+            if args.algorithm == "ame_net" and "ame_net" in bd:
+                ame = bd["ame_net"]
+                print("\nAME-Net Adaptive Dynamic Gating Telemetry:")
+                print(f"  * Centroid Weight (alpha ProtoNet): {ame['alpha_centroid_weight']*100:.1f}%")
+                print(f"  * Exemplar Weight (1-alpha Match):  {ame['exemplar_weight']*100:.1f}%")
+                print(f"  * Support Cluster Dispersion:       {ame['support_dispersion']:.4f}")
+            else:
+                print("\nAlgorithm Consensus Breakdown:")
+                if "protonet" in bd and bd["protonet"]:
+                    print(f"  * ProtoNet:     {bd['protonet']['class']:<12} ({bd['protonet']['confidence']*100:5.1f}% conf, dist={bd['protonet']['distance']:.3f})")
+                if "matching_net" in bd and bd["matching_net"]:
+                    print(f"  * MatchingNet:  {bd['matching_net']['class']:<12} ({bd['matching_net']['confidence']*100:5.1f}% conf, dist={bd['matching_net']['distance']:.3f})")
+                if "relation_net" in bd and bd["relation_net"]:
+                    print(f"  * RelationNet:  {bd['relation_net']['class']:<12} ({bd['relation_net']['confidence']*100:5.1f}% conf, dist={bd['relation_net']['distance']:.3f})")
+                if "maml" in bd and bd["maml"]:
+                    print(f"  * MAML:         {bd['maml']['class']:<12} ({bd['maml']['confidence']*100:5.1f}% conf, dist={bd['maml']['distance']:.3f})")
 
         if res['is_in_system']:
             print("\nTop 3 Classes with Highest Percentage:")

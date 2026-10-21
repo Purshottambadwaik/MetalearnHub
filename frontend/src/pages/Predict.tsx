@@ -32,7 +32,7 @@ interface PredictionResponse {
 export default function Predict() {
   const [queryImage, setQueryImage] = useState<File | null>(null);
   const [queryPreview, setQueryPreview] = useState<string>('');
-  const [algorithm, setAlgorithm] = useState<string>('ensemble');
+  const [algorithm, setAlgorithm] = useState<string>('ame_net');
   const [distanceThreshold, setDistanceThreshold] = useState<number>(50.0);
   const [loading, setLoading] = useState(false);
   const [prediction, setPrediction] = useState<PredictionResponse | null>(null);
@@ -153,14 +153,15 @@ export default function Predict() {
                   onChange={e => setAlgorithm(e.target.value)}
                   className="input w-full text-sm"
                 >
-                  <option value="ensemble">4-Way Consensus Ensemble (Recommended)</option>
+                  <option value="ame_net">AME-Net: Adaptive Metric-Exemplar Hybrid (Recommended)</option>
+                  <option value="ensemble">4-Way Consensus Ensemble (Voting Fusion)</option>
                   <option value="protonet">Prototypical Networks (Metric Centroid)</option>
                   <option value="matching_net">Matching Networks (Exemplar Attention)</option>
                   <option value="relation_net">Relation Networks (Neural Comparator)</option>
                   <option value="maml">MAML (First-Order Gradient Adapt)</option>
                 </select>
                 <span className="text-[11px] text-muted mt-1 block">
-                  Ensemble combines ProtoNet, MatchingNet, RelationNet, and MAML for highest reliability.
+                  AME-Net dynamically weights centroid clustering vs exemplar memory using support set dispersion to beat individual models.
                 </span>
               </div>
 

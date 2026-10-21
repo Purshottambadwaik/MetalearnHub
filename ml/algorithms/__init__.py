@@ -19,6 +19,10 @@ from ml.algorithms.maml.maml import (
     MAML,
     MAMLAlgorithm,
 )
+from ml.algorithms.hybrid.ame_net import (
+    AMENet,
+    AMENetAlgorithm,
+)
 
 
 def get_algorithm(
@@ -40,6 +44,7 @@ def get_algorithm(
     - "matching_networks", "matching_net"
     - "relation_networks", "relation_net"
     - "maml", "fomaml"
+    - "ame_net", "amenet", "hybrid"
     """
     normalized_name = name.lower().replace("-", "_").strip()
 
@@ -79,8 +84,18 @@ def get_algorithm(
             device=device,
             freeze_backbone=freeze_backbone,
         )
+    elif normalized_name in ["ame_net", "amenet", "hybrid"]:
+        return AMENetAlgorithm(
+            backbone_name=backbone_name,
+            pretrained=pretrained,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            device=device,
+            freeze_backbone=freeze_backbone,
+            **kwargs,
+        )
     else:
         raise ValueError(
             f"Unknown algorithm: '{name}'. Supported options are: "
-            f"['prototypical_networks', 'matching_networks', 'relation_networks', 'maml']"
+            f"['prototypical_networks', 'matching_networks', 'relation_networks', 'maml', 'ame_net']"
         )
